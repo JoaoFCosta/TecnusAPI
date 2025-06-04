@@ -3,6 +3,7 @@ using TecnusAPI.Models;
 using TecnusAPI.Repositorio.Interfaces;
 using TecnusAPI.Dtos;
 using TecnusAPI.Utils;
+using TecnusAPI.Seguranca;
 
 namespace Tecnus_API.Controllers
 {
@@ -24,13 +25,12 @@ namespace Tecnus_API.Controllers
         {
             try
             {
-                // Validação básica
                 if (string.IsNullOrWhiteSpace(loginDTO.Email_Usuario) || string.IsNullOrWhiteSpace(loginDTO.Senha_Usuario))
                 {
-                    return BadRequest("Email e senha são obrigatórios.");
+                    return BadRequest("E-mail e senha são obrigatórios.");
                 }
 
-                // Busca o usuário pelo email
+                // Busca o usuário pelo e-mail
                 var usuario = await _usuarioRepositorio.BuscarPorEmail(loginDTO.Email_Usuario);
 
                 if (usuario == null)
@@ -38,17 +38,23 @@ namespace Tecnus_API.Controllers
                     return Unauthorized("E-mail ou senha inválidos.");
                 }
 
-                // Verifica a senha
+                // Gera o hash da senha recebida para comparar
+                var hashSenha = loginDTO.Senha_Usuario.GerarHash();
+
+                // LOGS DE DEPURAÇÃO (REMOVA EM PRODUÇÃO)
+                Console.WriteLine($"Hash esperado: {usuario.Senha_Usuario}");
+                Console.WriteLine($"Hash recebido: {hashSenha}");
+
                 if (!usuario.SenhaValida(loginDTO.Senha_Usuario))
                 {
                     return Unauthorized("E-mail ou senha inválidos.");
                 }
 
-                // Retorna usuário autenticado (você pode customizar o retorno)
                 return Ok(usuario);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine("Erro no login: " + ex.Message);
                 return StatusCode(500, "Erro interno ao processar o login.");
             }
         }
