@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TecnusAPI.Models;
 using TecnusAPI.Repositorio.Interfaces;
+using TecnusAPI.Dtos;
 using TecnusAPI.Utils;
 
 namespace Tecnus_API.Controllers
@@ -16,6 +17,40 @@ namespace Tecnus_API.Controllers
         {
             _usuarioRepositorio = usuarioRepositorio;
             _email = email;
+        }
+
+        [HttpPost("Login")]
+        public async Task<ActionResult<UsuarioModel>> Login([FromBody] LoginDTO loginDTO)
+        {
+            try
+            {
+                // Validação básica
+                if (string.IsNullOrWhiteSpace(loginDTO.Email_Usuario) || string.IsNullOrWhiteSpace(loginDTO.Senha_Usuario))
+                {
+                    return BadRequest("Email e senha são obrigatórios.");
+                }
+
+                // Busca o usuário pelo email
+                var usuario = await _usuarioRepositorio.BuscarPorEmail(loginDTO.Email_Usuario);
+
+                if (usuario == null)
+                {
+                    return Unauthorized("E-mail ou senha inválidos.");
+                }
+
+                // Verifica a senha
+                if (!usuario.SenhaValida(loginDTO.Senha_Usuario))
+                {
+                    return Unauthorized("E-mail ou senha inválidos.");
+                }
+
+                // Retorna usuário autenticado (você pode customizar o retorno)
+                return Ok(usuario);
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, "Erro interno ao processar o login.");
+            }
         }
 
 
