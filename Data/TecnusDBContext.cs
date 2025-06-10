@@ -1,41 +1,47 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+using System.Reflection.Emit;
 using TecnusAPI.Models;
-using TecnusAPI.Data.Mapa;
 
 namespace TecnusAPI.Data
 {
-    public class TecnusDBContext : DbContext
+    public class TecnusDBContext : IdentityDbContext<AppUsuario>
     {
         public TecnusDBContext(DbContextOptions<TecnusDBContext> options)
             : base(options)
         {
         }
+        public DbSet<AppUsuario> AppUsuarios { get; set; }
+        public DbSet<CursoModel> CursosModel { get; set; }
+        public DbSet<FeedbackModel> FeedbacksModel { get; set; }
+        public DbSet<QuizModel> QuizzesModel { get; set; }
+        public DbSet<PerguntaModel> PerguntasModel { get; set; }
+        public DbSet<RespostaModel> RespostasModel { get; set; }
+        public DbSet<VideoModel> VideoModel { get; set; }
+        public DbSet<VisualizacaoVideoModel> VisualizacaoVideosModel { get; set; }
 
-        public DbSet<UsuarioModel> Tbl_Usuario { get; set; }
-        public DbSet<CursoModel> Tbl_Curso { get; set; }
-        public DbSet<FeedbackModel> Tbl_Feedback { get; set; }
-        public DbSet<QuizModel> Tbl_Quiz { get; set; }
-        public DbSet<PerguntaModel> Tbl_Pergunta { get; set; }
-        public DbSet<RespostaModel> Tbl_Resposta { get; set; }
-        public DbSet<VideoModel> Tbl_Video { get; set; }
-
-        public DbSet<VisualizacaoVideoModel> Tbl_VisualizacaoVideo { get; set; }
-
-
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(ModelBuilder builder)
         {
-            modelBuilder.ApplyConfiguration(new UsuarioMap());
-            modelBuilder.ApplyConfiguration(new CursoMap());
-            modelBuilder.ApplyConfiguration(new FeedbackMap());
-            modelBuilder.ApplyConfiguration(new QuizMap());
-            modelBuilder.ApplyConfiguration(new PerguntaMap());
-            modelBuilder.ApplyConfiguration(new RespostaMap());
-            modelBuilder.ApplyConfiguration(new VideoVisualizacaoMap());
-            modelBuilder.ApplyConfiguration(new VideoMap());
+            // Essa chamada é obrigatória para Identity funcionar corretamente.
+            base.OnModelCreating(builder);
+
+            builder.Entity<CursoModel>().HasKey(c => c.Id_Curso);
+            builder.Entity<FeedbackModel>().HasKey(c => c.Id_Feedback);
+            builder.Entity<PerguntaModel>().HasKey(c => c.Id_Pergunta);
+            builder.Entity<QuizModel>().HasKey(c => c.Id_Quiz);
+            builder.Entity<RespostaModel>().HasKey(c => c.Id_Resposta);
+            builder.Entity<VideoModel>().HasKey(c => c.Id_Video);
+            builder.Entity<VisualizacaoVideoModel>().HasKey(c => c.Id_Visualizacao);
 
 
-            base.OnModelCreating(modelBuilder);
+            builder.Entity<CursoModel>().ToTable("Cursos");
+            builder.Entity<FeedbackModel>().ToTable("Feedbacks");
+            builder.Entity<QuizModel>().ToTable("Quizzes");
+            builder.Entity<PerguntaModel>().ToTable("Perguntas");
+            builder.Entity<RespostaModel>().ToTable("Respostas");
+            builder.Entity<VideoModel>().ToTable("Videos");
+            builder.Entity<VisualizacaoVideoModel>().ToTable("VisualizacaoVideos");
+            builder.Entity<AppUsuario>().ToTable("Usuarios");
         }
-
     }
 }

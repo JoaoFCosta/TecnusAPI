@@ -1,301 +1,124 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using TecnusAPI.Models;
-using TecnusAPI.Repositorio.Interfaces;
-using TecnusAPI.Dtos;
-using TecnusAPI.Utils;
-using TecnusAPI.Seguranca;
+using TecnusAPI.DTO;
+using Microsoft.AspNetCore.Authorization;
 
-namespace Tecnus_API.Controllers
+namespace TecnusAPI.Controllers
 {
-    [Route("[controller]")]
     [ApiController]
-    public class UsuarioControler : ControllerBase
+    [Route("api/[controller]")]
+    public class UsuarioController : ControllerBase
     {
-        private readonly IUsuariosRepositorio _usuarioRepositorio;
-        private readonly IEmail _email;
+        private readonly UserManager<AppUsuario> _userManager;
+        private readonly SignInManager<AppUsuario> _signInManager;
 
-        public UsuarioControler(IUsuariosRepositorio usuarioRepositorio, IEmail email)
+        public UsuarioController(
+            UserManager<AppUsuario> userManager,
+            SignInManager<AppUsuario> signInManager)
         {
-            _usuarioRepositorio = usuarioRepositorio;
-            _email = email;
+            _userManager = userManager;
+            _signInManager = signInManager;
         }
 
-        [HttpPost("Login")]
-        public async Task<ActionResult<UsuarioModel>> Login([FromBody] LoginDTO loginDTO)
+        [HttpPost("register")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Register([FromBody] RegisterRequestDTO model)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                if (string.IsNullOrWhiteSpace(loginDTO.Email_Usuario) || string.IsNullOrWhiteSpace(loginDTO.Senha_Usuario))
-                {
-                    return BadRequest("E-mail e senha são obrigatórios.");
-                }
-
-                // Busca o usuário pelo e-mail
-                var usuario = await _usuarioRepositorio.BuscarPorEmail(loginDTO.Email_Usuario);
-
-                if (usuario == null)
-                {
-                    return Unauthorized("E-mail ou senha inválidos.");
-                }
-
-                // Gera o hash da senha recebida para comparar
-                var hashSenha = loginDTO.Senha_Usuario.GerarHash();
-
-                // LOGS DE DEPURAÇÃO (REMOVA EM PRODUÇÃO)
-                Console.WriteLine($"Hash esperado: {usuario.Senha_Usuario}");
-                Console.WriteLine($"Hash recebido: {hashSenha}");
-
-                if (!usuario.SenhaValida(loginDTO.Senha_Usuario))
-                {
-                    return Unauthorized("E-mail ou senha inválidos.");
-                }
-
-                return Ok(usuario);
+                return BadRequest(ModelState);
             }
-            catch (Exception ex)
+
+            var user = new AppUsuario
             {
-                Console.WriteLine("Erro no login: " + ex.Message);
-                return StatusCode(500, "Erro interno ao processar o login.");
+                UserName = model.Email,
+                Email = model.Email,
+                PhoneNumber = model.Telefone,
+                Nome_Usuario = model.NomeCompleto,
+            };
+            var result = await _userManager.CreateAsync(user, model.Password);
+
+            if (result.Succeeded)
+            {
+                return Ok(new { Message = "Usuário registrado com sucesso!", UserId = user.Id });
             }
+
+            return BadRequest(new { Errors = result.Errors.Select(e => e.Description) });
         }
 
-
-        [HttpGet("Mostrar Todos Usuaios")]
-        public async Task<ActionResult<List<UsuarioModel>>> ListarTodas()
+        [HttpPost("login")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Login([FromBody] LoginRequestDTO model)
         {
-            try
+            if (!ModelState.IsValid)
             {
-                List<UsuarioModel> usuario = await _usuarioRepositorio.BuscarTodosUsuarios();
+                return BadRequest(ModelState);
+            }
 
-                if (usuario == null || !usuario.Any())
-                {
-                    return NotFound("Nenhum usuario encontrado.");
-                }
+            var result = await _signInManager.PasswordSignInAsync(model.Email, model.Password, isPersistent: false, lockoutOnFailure: false);
 
-                return Ok(usuario); // Retorna codigo 200
-            }
-            catch (ArgumentException ex)
+            if (result.Succeeded)
             {
-                return BadRequest(ex.Message); // Retorna codigo 400
+                var appUser = await _userManager.FindByEmailAsync(model.Email);
+                // IMPLEMENTAR AQUI A LÓGICA DE GERAÇÃO DE JWT
+                // Exemplo:
+                // var roles = await _userManager.GetRolesAsync(appUser);
+                // var token = _jwtService.GenerateToken(appUser, roles);
+
+                return Ok(new { Message = "Login bem-sucedido!", /* token = token */ });
             }
-            catch (UnauthorizedAccessException ex)
+
+            if (result.IsLockedOut)
             {
-                return Unauthorized(ex.Message); // Retorna codigo 401
+                return Unauthorized(new { Message = "Conta bloqueada. Tente novamente mais tarde." });
             }
-            catch (Exception ex)
+            if (result.IsNotAllowed)
             {
-                return StatusCode(500, "Ocorreu um erro interno no servidor."); // Retorna codigo 500
+                return Unauthorized(new { Message = "Login não permitido. Confirme seu e-mail ou conta." });
             }
+
+            return Unauthorized(new { Message = "Credenciais inválidas." });
         }
 
-        [HttpGet("Buscar Cliente por id")]
-        public async Task<ActionResult<UsuarioModel>> BuscarPorId(int id)
+        [HttpGet("profile")]
+        [Authorize]
+        public async Task<IActionResult> GetUserProfile()
         {
-            try
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
             {
-                UsuarioModel usuario = await _usuarioRepositorio.BuscarPorId(id);
-                if (usuario == null)
-                {
-                    return NotFound("Nenhum Clinte encontrado");
-                }
-                return Ok(usuario);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "Ocorreu um erro interno no servidor."); // Retorna codigo 500
+                return Unauthorized(new { Message = "Usuário não autenticado." });
             }
 
+            var appUser = await _userManager.FindByIdAsync(userId);
+
+            if (appUser == null)
+            {
+                return NotFound(new { Message = "Perfil de usuário não encontrado." });
+            }
+
+            var userProfile = new UserProfileDTO
+            {
+                Id = appUser.Id,
+                Email = appUser.Email,
+                NomeCompleto = appUser.Nome_Usuario,
+                Telefone = appUser.PhoneNumber,
+            };
+
+            return Ok(userProfile);
         }
 
-        [HttpPost("Cadastrar Usuario")]
-        public async Task<ActionResult<UsuarioModel>> Cadastrar([FromBody] UsuarioModel usuarioModel)
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout()
         {
-            try
-            {
-                // Validação do modelo recebido
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(ModelState); // 400 - Dados inválidos
-                }
-
-                // Verifica se o CPF é válido
-                if (!CpfValidator.ValidarCpfCliente(usuarioModel.CPF_Usuario))
-                {
-                    return BadRequest("CPF inválido."); // 400 - CPF inválido
-                }
-
-                // Verifica se o ID já existe
-                if (usuarioModel.Id_Usuario > 0) // Supondo que ID 0 ou negativo não é permitido
-                {
-                    UsuarioModel clientePorId = await _usuarioRepositorio.BuscarPorId(usuarioModel.Id_Usuario);
-                    if (clientePorId != null)
-                    {
-                        return Conflict("Já existe um usuario com este ID."); // 409 - Conflito
-                    }
-                }
-
-                // Verifica se o CPF já existe
-                UsuarioModel clienteExistentePorCpf = await _usuarioRepositorio.BuscarPorCpf(usuarioModel.CPF_Usuario);
-                if (clienteExistentePorCpf != null)
-                {
-                    return Conflict("Já existe um cliente com este CPF."); // 409 - Conflito
-                }
-
-                // Verifica se o e-mail já existe
-                UsuarioModel clientePorEmail = await _usuarioRepositorio.BuscarPorEmail(usuarioModel.Email_Usuario);
-                if (clientePorEmail != null)
-                {
-                    return Conflict("Já existe um cliente com este e-mail."); // 409 - Conflito
-                }
-
-                // Adiciona o cliente ao repositório
-                UsuarioModel usuario = await _usuarioRepositorio.Adicionar(usuarioModel);
-
-                // Retorna o cliente criado com status 201 (Created)
-                return CreatedAtAction(nameof(BuscarPorId), new { id = usuario.Id_Usuario }, usuario);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message); // 400 - Argumento inválido
-            }
-            catch (Exception ex)
-            {
-
-                // Retorna erro 500 - Internal Server Error
-                return StatusCode(500, "Ocorreu um erro interno no servidor.");
-            }
-        }
-
-
-
-
-        [HttpPut("Atualizar Usuario")]
-        public async Task<ActionResult<UsuarioModel>> Atualizar([FromBody] UsuarioModel usuarioModel, int id)
-        {
-            try
-            {
-                UsuarioModel usuarioExistente = await _usuarioRepositorio.BuscarPorId(id);
-                if (usuarioExistente == null)
-                {
-                    return NotFound("Cliente não encontrado."); // 404
-                }
-
-                // Verifica se o CPF é válido
-                if (!CpfValidator.ValidarCpfCliente(usuarioModel.CPF_Usuario))
-                {
-                    return BadRequest("CPF inválido."); // 400
-                }
-
-                // Verifica se o CPF já existe em outro cliente
-                UsuarioModel usuarioComMesmoCpf = await _usuarioRepositorio.BuscarPorCpf(usuarioModel.CPF_Usuario);
-                if (usuarioComMesmoCpf != null && usuarioComMesmoCpf.Id_Usuario != id)
-                {
-                    return Conflict("Já existe outro cliente com este CPF."); // 409
-                }
-
-                // Verifica se o e-mail já existe em outro cliente
-                UsuarioModel usuarioComMesmoEmail = await _usuarioRepositorio.BuscarPorEmail(usuarioModel.Email_Usuario);
-                if (usuarioComMesmoEmail != null && usuarioComMesmoEmail.Id_Usuario != id)
-                {
-                    return Conflict("Já existe outro cliente com este e-mail."); // 409
-                }
-
-                usuarioModel.Id_Usuario = id;
-                UsuarioModel usuario = await _usuarioRepositorio.Atualizar(usuarioModel, id);
-                return NoContent();
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message); // 400 - Argumento inválido
-            }
-            catch (Exception ex)
-            {
-
-                // Retorna erro 500 - Internal Server Error
-                return StatusCode(500, "Ocorreu um erro interno no servidor.");
-            }
-
-        }
-        [HttpDelete("{id}")]
-        public async Task<ActionResult<UsuarioModel>> Apagar(int id)
-        {
-            bool apagado = await _usuarioRepositorio.Apagar(id);
-            return Ok(apagado);
-        }
-
-        [HttpPost]
-        [Route("enviar-link-redefinir-senha")]
-        public async Task<ActionResult<UsuarioModel>> EnviarLinkParaRedefinirSenha(RedefinirSenhaModel redefinirSenhaModel)
-        {
-            try
-            {
-                if (ModelState.IsValid)
-                {
-                    UsuarioModel usuario = await _usuarioRepositorio.BuscarPorEmailECpf(redefinirSenhaModel.Email, redefinirSenhaModel.Cpf);
-
-                    if (usuario != null)
-                    {
-                        string novaSenha = usuario.GerarNovaSenha();
-                        string mensagem = $"Sua nova Senha é: {novaSenha}";
-
-                        bool emailEnviado = _email.Enviar(usuario.Email_Usuario, "Tecnus - Nova Senha", mensagem);
-
-                        if (emailEnviado)
-                        {
-                            await _usuarioRepositorio.Atualizar_para_redefinicao_senha(usuario);
-                            return Ok(novaSenha);
-                        }
-                        else
-                        {
-                            return BadRequest("Email não foi enviado.");
-                        }
-                    }
-                    return BadRequest("Usuario não encontrado.");
-                }
-
-                var erros = ModelState.Values
-                    .SelectMany(v => v.Errors)
-                    .Select(e => e.ErrorMessage)
-                    .ToList();
-
-                return BadRequest(new { Mensagem = "Dados inválidos.", Erros = erros });
-            }
-            catch (Exception e)
-            {
-                return StatusCode(500, "Ocorreu um erro no servidor.");
-            }
-        }
-
-        [HttpPost("redefinir senha")]
-        public async Task<ActionResult<UsuarioModel>> Alterar(AlterarSenhaModel alterarSenhaModel)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    await _usuarioRepositorio.AlterarSenha(alterarSenhaModel);
-                    var erros = ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                        .ToList();
-
-                    // Retorna um BadRequest (400) com os erros de validação
-                    return BadRequest(new
-                    {
-                        Mensagem = "Erro ao alterar senha.",
-                        Erros = erros
-                    });
-                }
-
-
-                return Ok(new { Mensagem = "Senha alterada com sucesso" });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "Ocorreu um erro no servidor.");
-            }
-
+            await _signInManager.SignOutAsync();
+            return Ok(new { Message = "Logout realizado com sucesso." });
         }
     }
 }
-
