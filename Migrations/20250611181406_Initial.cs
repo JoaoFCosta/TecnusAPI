@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace TecnusAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class UpdatingModels : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -77,9 +77,7 @@ namespace TecnusAPI.Migrations
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     Nome_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Email_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CPF_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Telefone_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Endereco_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Senha_Usuario = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),

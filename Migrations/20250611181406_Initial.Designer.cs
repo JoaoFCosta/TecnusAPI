@@ -12,8 +12,8 @@ using TecnusAPI.Data;
 namespace TecnusAPI.Migrations
 {
     [DbContext(typeof(TecnusDBContext))]
-    [Migration("20250610182500_UpdatingModels")]
-    partial class UpdatingModels
+    [Migration("20250611181406_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -166,9 +166,6 @@ namespace TecnusAPI.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
-                    b.Property<string>("CPF_Usuario")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -181,9 +178,6 @@ namespace TecnusAPI.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("Email_Usuario")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Endereco_Usuario")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("LockoutEnabled")

@@ -124,6 +124,9 @@ app.UseSwaggerUI();
 // 2. Redireciona requisições HTTP para HTTPS
 app.UseHttpsRedirection();
 
+// Para teste
+app.UseStaticFiles();
+
 // 3. Habilita o CORS (deve vir antes de UseAuthentication e UseAuthorization)
 app.UseCors("AllowAll");
 
