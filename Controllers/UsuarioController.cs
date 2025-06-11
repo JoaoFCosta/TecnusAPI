@@ -1,11 +1,14 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
-using TecnusAPI.Models;
 using TecnusAPI.DTO;
-using Microsoft.AspNetCore.Authorization;
+using TecnusAPI.Models;
 
 namespace TecnusAPI.Controllers
 {
@@ -15,13 +18,16 @@ namespace TecnusAPI.Controllers
     {
         private readonly UserManager<AppUsuario> _userManager;
         private readonly SignInManager<AppUsuario> _signInManager;
+        private readonly IConfiguration _configuration;
 
         public UsuarioController(
             UserManager<AppUsuario> userManager,
-            SignInManager<AppUsuario> signInManager)
+            SignInManager<AppUsuario> signInManager,
+            IConfiguration configuration)
         {
             _userManager = userManager;
             _signInManager = signInManager;
+            _configuration = configuration;
         }
 
         [HttpPost("register")]
@@ -64,12 +70,8 @@ namespace TecnusAPI.Controllers
             if (result.Succeeded)
             {
                 var appUser = await _userManager.FindByEmailAsync(model.Email);
-                // IMPLEMENTAR AQUI A LÓGICA DE GERAÇÃO DE JWT
-                // Exemplo:
-                // var roles = await _userManager.GetRolesAsync(appUser);
-                // var token = _jwtService.GenerateToken(appUser, roles);
-
-                return Ok(new { Message = "Login bem-sucedido!", /* token = token */ });
+                var token = GerarToken(appUser);
+                return Ok(new { Message = "Login bem-sucedido!", Token = token });
             }
 
             if (result.IsLockedOut)
@@ -119,6 +121,31 @@ namespace TecnusAPI.Controllers
         {
             await _signInManager.SignOutAsync();
             return Ok(new { Message = "Logout realizado com sucesso." });
+        }
+
+        private string GerarToken(AppUsuario usuario)
+        {
+            var jwtSettings = _configuration.GetSection("Jwt");
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+        new Claim(JwtRegisteredClaimNames.Sub, usuario.Email),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id),
+        new Claim(ClaimTypes.Name, usuario.UserName)
+    };
+
+            var token = new JwtSecurityToken(
+                issuer: jwtSettings["Issuer"],
+                audience: jwtSettings["Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(double.Parse(jwtSettings["ExpireMinutes"] ?? "60")),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
 }

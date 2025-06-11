@@ -1,7 +1,10 @@
-using Microsoft.EntityFrameworkCore;
-using TecnusAPI.Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity; // Necessário para IdentityUser e IdentityRole
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
+using TecnusAPI.Data;
 using TecnusAPI.Models; // Necessário para configuração do Swagger
 
 var builder = WebApplication.CreateBuilder(args);
@@ -84,6 +87,31 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+var secretKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrEmpty(secretKey))
+    throw new Exception("Chave secreta JWT não configurada.");
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+    };
+});
+
+builder.Services.AddAuthorization();
+
 // --- Construção do Aplicativo ---
 var app = builder.Build();
 
@@ -110,7 +138,7 @@ app.MapControllers();
 
 // 7. Mapeia os endpoints de autenticação do Identity
 // Isso irá expor rotas como /Usuario/register, /Usuario/login, etc.
-app.MapGroup("/Usuario").MapIdentityApi<IdentityUser>();
+//app.MapGroup("/Usuario").MapIdentityApi<AppUsuario>();
 
 // 8. Executa o aplicativo
 app.Run();
