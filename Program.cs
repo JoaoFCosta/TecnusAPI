@@ -138,7 +138,7 @@ app.MapControllers();
 
 // 7. Mapeia os endpoints de autenticação do Identity
 // Isso irá expor rotas como /Usuario/register, /Usuario/login, etc.
-//app.MapGroup("/Usuario").MapIdentityApi<AppUsuario>();
+app.MapGroup("/Usuario").MapIdentityApi<AppUsuario>();
 
 // 8. Executa o aplicativo
 app.Run();

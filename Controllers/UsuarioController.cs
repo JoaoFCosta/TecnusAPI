@@ -71,7 +71,8 @@ namespace TecnusAPI.Controllers
             {
                 var appUser = await _userManager.FindByEmailAsync(model.Email);
                 var token = GerarToken(appUser);
-                return Ok(new { Message = "Login bem-sucedido!", Token = token });
+                return Ok(new { Message = "Login bem-sucedido!", Token = token, Username = appUser.Nome_Usuario });
+
             }
 
             if (result.IsLockedOut)
@@ -86,56 +87,23 @@ namespace TecnusAPI.Controllers
             return Unauthorized(new { Message = "Credenciais inválidas." });
         }
 
-        [HttpGet("profile")]
-        [Authorize]
-        public async Task<IActionResult> GetUserProfile()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized(new { Message = "Usuário não autenticado." });
-            }
-
-            var appUser = await _userManager.FindByIdAsync(userId);
-
-            if (appUser == null)
-            {
-                return NotFound(new { Message = "Perfil de usuário não encontrado." });
-            }
-
-            var userProfile = new UserProfileDTO
-            {
-                Id = appUser.Id,
-                Email = appUser.Email,
-                NomeCompleto = appUser.Nome_Usuario,
-                Telefone = appUser.PhoneNumber,
-            };
-
-            return Ok(userProfile);
-        }
-
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<IActionResult> Logout()
-        {
-            await _signInManager.SignOutAsync();
-            return Ok(new { Message = "Logout realizado com sucesso." });
-        }
-
         private string GerarToken(AppUsuario usuario)
         {
             var jwtSettings = _configuration.GetSection("Jwt");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
-            {
+            var claims = new List<Claim>
+    {
         new Claim(JwtRegisteredClaimNames.Sub, usuario.Email),
-        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-        new Claim(ClaimTypes.NameIdentifier, usuario.Id),
-        new Claim(ClaimTypes.Name, usuario.UserName)
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // ID único do token
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id), // ID do usuário do Identity
+        new Claim(ClaimTypes.Email, usuario.Email), // Claim para o Email
+
+        new Claim(ClaimTypes.GivenName, usuario.Nome_Usuario),
+
     };
+
 
             var token = new JwtSecurityToken(
                 issuer: jwtSettings["Issuer"],
@@ -146,6 +114,32 @@ namespace TecnusAPI.Controllers
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAllUsers()
+        {
+            // 1. Obter todos os usuários
+            var users = _userManager.Users.ToList(); // Obtém todos os AppUsuario do DbSet
+
+            // 2. Mapear para o DTO de lista de usuários
+            var userList = new List<UserListDTO>();
+            foreach (var user in users)
+            {
+                // Opcional: Se você quiser as roles, você precisaria buscar elas para cada usuário
+                // var roles = await _userManager.GetRolesAsync(user);
+
+                userList.Add(new UserListDTO
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    NomeCompleto = user.Nome_Usuario,
+                    Telefone = user.PhoneNumber,
+                    // Roles = roles.ToList() // Se você adicionou a propriedade Roles no DTO
+                });
+            }
+
+            return Ok(userList);
         }
     }
 }
