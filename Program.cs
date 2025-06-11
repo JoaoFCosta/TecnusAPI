@@ -19,7 +19,7 @@ builder.Services.AddDbContext<TecnusDBContext>(options =>
 // Configura o Identity para usar IdentityUser (usuário padrão) e IdentityRole (para roles)
 // e o seu TecnusDBContext para persistir os dados do Identity.
 // `AddIdentityApiEndpoints` já inclui `AddEntityFrameworkStores` e `AddDefaultTokenProviders`.
-builder.Services.AddIdentityApiEndpoints<AppUsuario>(options => // <--- Mude de IdentityUser para UsuarioModel
+builder.Services.AddIdentity<AppUsuario, IdentityRole>(options =>
 {
     // *** RECOMENDAÇÃO DE SEGURANÇA: Configurações de senha mais fortes ***
     options.Password.RequireNonAlphanumeric = false;
@@ -34,9 +34,9 @@ builder.Services.AddIdentityApiEndpoints<AppUsuario>(options => // <--- Mude de 
 
     options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
 })
-.AddRoles<IdentityRole>()
-.AddEntityFrameworkStores<TecnusDBContext>() // Isso está correto se TecnusDBContext herda de IdentityDbContext<UsuarioModel>
-.AddDefaultTokenProviders();
+.AddEntityFrameworkStores<TecnusDBContext>()
+.AddDefaultTokenProviders()
+.AddRoles<IdentityRole>();
 
 // 3. Adicionar o serviço de CORS (removido duplicidade)
 builder.Services.AddCors(options =>
@@ -141,7 +141,61 @@ app.MapControllers();
 
 // 7. Mapeia os endpoints de autenticação do Identity
 // Isso irá expor rotas como /Usuario/register, /Usuario/login, etc.
-app.MapGroup("/Usuario").MapIdentityApi<AppUsuario>();
+//app.MapGroup("/Usuario").MapIdentityApi<AppUsuario>();
+
+using (var scope = app.Services.CreateScope())
+{
+    var serviceProvider = scope.ServiceProvider;
+    try
+    {
+        var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = serviceProvider.GetRequiredService<UserManager<AppUsuario>>(); // Note: AppUsuario
+
+        // Garante que a role "Admin" existe
+        if (!await roleManager.RoleExistsAsync("Admin"))
+        {
+            await roleManager.CreateAsync(new IdentityRole("Admin"));
+            Console.WriteLine("Role 'Admin' criada.");
+        }
+
+        // Cria um usuário admin inicial se não existir e atribui a role "Admin"
+        var adminUserEmail = "superadmin@tecnus.com"; // Email do admin
+        var adminUser = await userManager.FindByEmailAsync(adminUserEmail);
+
+        if (adminUser == null)
+        {
+            adminUser = new AppUsuario
+            {
+                UserName = adminUserEmail,
+                Email = adminUserEmail,
+                EmailConfirmed = true,
+                Nome_Usuario = "Admin Global" // Preencha o campo personalizado Nome_Usuario
+            };
+            var createResult = await userManager.CreateAsync(adminUser, "SuaSenhaSegura123!"); // <-- MUDE ESTA SENHA FORTEMENTE!
+
+            if (createResult.Succeeded)
+            {
+                await userManager.AddToRoleAsync(adminUser, "Admin");
+                Console.WriteLine($"Usuário Admin '{adminUserEmail}' criado e role 'Admin' atribuída.");
+            }
+            else
+            {
+                Console.WriteLine($"Erro ao criar usuário Admin: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
+            }
+        }
+        else if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
+        {
+            // Se o usuário admin já existe, mas não tem a role "Admin", adicione-a
+            await userManager.AddToRoleAsync(adminUser, "Admin");
+            Console.WriteLine($"Role 'Admin' atribuída ao usuário existente '{adminUserEmail}'.");
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Ocorreu um erro durante o seeding do banco de dados.");
+    }
+}
 
 // 8. Executa o aplicativo
 app.Run();
